@@ -1,0 +1,7 @@
+# ใช้ตอนทดสอบในเครื่อง (npm run dev) — คัดลอกเป็นไฟล์ .dev.vars แล้วใส่ค่าจริง
+# ห้ามส่งไฟล์ .dev.vars ให้ใคร และห้ามเอาขึ้น GitHub (ไฟล์นี้ถูกกันไว้ใน .gitignore แล้ว)
+LINE_CHANNEL_SECRET=ใส่-Channel-secret
+LINE_CHANNEL_ACCESS_TOKEN=ใส่-Channel-access-token
+OWNER_USER_ID=ใส่-Your-user-ID
+AI_API_KEY=ใส่-AI-key
+EXPORT_TOKEN=local-test-token

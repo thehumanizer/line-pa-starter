@@ -1,0 +1,26 @@
+{
+  "name": "line-pa-starter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PA ของเราในไลน์: ฟังกลุ่ม คุย 1:1 สรุปทุกเช้า และซิงก์สมองกลางเข้า Claude",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute line-pa-brain --local --file=schema.sql",
+    "sync": "node scripts/sync.mjs",
+    "status": "node mcp/server.mjs status",
+    "test:webhook": "node scripts/fake-line.mjs",
+    "logs": "wrangler tail",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.130.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261006.1",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}

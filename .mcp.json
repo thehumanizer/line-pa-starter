@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "line-pa": {
+      "command": "node",
+      "args": ["mcp/server.mjs"]
+    }
+  }
+}

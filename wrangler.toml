@@ -1,0 +1,37 @@
+# ตั้งค่าบอทของเรา — ช่องที่มี "← แก้ได้" เปลี่ยนเองได้เลย
+name = "line-pa"                       # ← แก้ได้: ชื่อบอทบน Cloudflare (ภาษาอังกฤษ ไม่มีเว้นวรรค)
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ไฟล์ .md (ตัวตน PA และรูปแบบการสรุป) ถูกรวมเข้าไปในบอทตอน deploy
+rules = [{ type = "Text", globs = ["**/*.md"], fallthrough = true }]
+
+[vars]
+PA_NAME = "พลอย"                       # ← แก้ได้: ชื่อ PA ของเรา
+AI_PROVIDER = "gemini"                 # ← แก้ได้: gemini / claude / openai / mock (mock = ทดสอบโดยไม่เรียก AI จริง)
+AI_MODEL = ""                          # ← เว้นว่าง = ใช้รุ่นมาตรฐาน (claude: แชท Sonnet 5.5 · สรุป Opus 5.5)
+AI_BASE_URL = ""                       # ← ใช้กับ openai เท่านั้น เช่น https://api.openai.com/v1 หรือ https://api.deepseek.com/v1
+TIMEZONE = "Asia/Bangkok"
+JOIN_NOTICE = "on"                     # on = บอทแนะนำตัวและแจ้งว่าจะเก็บข้อความ เมื่อถูกเชิญเข้ากลุ่ม
+RETENTION_DAYS = "90"                  # ← นโยบายบริษัท: เก็บข้อความกี่วัน แล้วลบอัตโนมัติ (ทุกเช้าพร้อมสรุป)
+
+# สรุปทุกเช้า 08:00 เวลาไทย (= 01:00 UTC) ← แก้เวลาได้ที่นี่
+[triggers]
+crons = ["0 1 * * *"]
+
+# คิวงานหนัก: พิมพ์ "สรุป" แล้วส่งไปทำในคิว (ทำได้นานสุด 15 นาที) — npm run setup สร้างให้เอง
+[[queues.producers]]
+binding = "JOBS"
+queue = "line-pa-jobs"
+
+[[queues.consumers]]
+queue = "line-pa-jobs"
+max_batch_size = 1
+max_retries = 1
+
+# สมองกลาง — คำสั่ง npm run setup จะเติม database_id ให้เอง
+[[d1_databases]]
+binding = "DB"
+database_name = "line-pa-brain"
+database_id = "00000000-0000-0000-0000-000000000000"
