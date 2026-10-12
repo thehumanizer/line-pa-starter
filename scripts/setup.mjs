@@ -8,16 +8,27 @@ import { createInterface } from "node:readline/promises";
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 const ask = async (q, def = "") => (await rl.question(def ? `${q} [${def}]: ` : `${q}: `)).trim() || def;
 const step = (n, t) => console.log(`\n\x1b[32m━━ ขั้นที่ ${n}: ${t}\x1b[0m`);
-const wrangler = (args, opts = {}) => spawnSync("npx", ["wrangler", ...args], { encoding: "utf8", shell: process.platform === "win32", ...opts });
 const fail = (msg) => { console.error(`\n\x1b[31m✗ ${msg}\x1b[0m`); rl.close(); process.exit(1); };
+const LOGIN_LOST = /not logged in|not authenticated|non-interactive environment|CLOUDFLARE_API_TOKEN/i;
+const wrangler = (args, opts = {}) => {
+  const r = spawnSync("npx", ["wrangler", ...args], { encoding: "utf8", shell: process.platform === "win32", ...opts });
+  // ล็อกอิน Cloudflare หมดอายุกลางทาง → บอกเป็นภาษาคน แทนข้อความ error ยาวๆ ของ wrangler
+  if (r.status !== 0 && LOGIN_LOST.test(`${r.stdout ?? ""}${r.stderr ?? ""}`)) {
+    fail("ล็อกอิน Cloudflare หมดอายุ → พิมพ์ npx wrangler login กด Allow ในเบราว์เซอร์ แล้วรัน npm run setup ใหม่ (ขั้นที่ทำแล้วจะข้ามให้)");
+  }
+  return r;
+};
+const loggedIn = () => spawnSync("npx", ["wrangler", "whoami", "--json"], { encoding: "utf8", shell: process.platform === "win32" }).status === 0;
 
 let toml = readFileSync("wrangler.toml", "utf8");
 const DB_NAME = toml.match(/database_name\s*=\s*"([^"]+)"/)[1];
 
 step(1, "เช็คว่าล็อกอิน Cloudflare แล้ว");
-if (wrangler(["whoami"]).stdout?.match(/not authenticated/i)) {
-  console.log("ยังไม่ได้ล็อกอิน กำลังเปิดเบราว์เซอร์ให้กด Allow…");
-  if (wrangler(["login"], { stdio: "inherit" }).status !== 0) fail("ล็อกอินไม่สำเร็จ ลองรัน npx wrangler login เองอีกครั้ง");
+// whoami --json จบด้วย error ทุกกรณีที่ใช้งานไม่ได้ (ไม่เคยล็อกอิน / token หมดอายุ)
+if (!loggedIn()) {
+  console.log("ยังไม่ได้ล็อกอิน หรือล็อกอินหมดอายุ กำลังเปิดเบราว์เซอร์ให้กด Allow…");
+  spawnSync("npx", ["wrangler", "login"], { stdio: "inherit", shell: process.platform === "win32" });
+  if (!loggedIn()) fail("ล็อกอินไม่สำเร็จ ลองรัน npx wrangler login เองอีกครั้ง แล้วค่อย npm run setup");
 }
 console.log("✓ ล็อกอินแล้ว");
 
