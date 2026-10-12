@@ -88,7 +88,7 @@ step(2, "ตั้งชื่อบอท");
 const curName = toml.match(/^name\s*=\s*"([^"]+)"/m)[1];
 const curPa = toml.match(/PA_NAME\s*=\s*"([^"]*)"/)[1];
 const workerName = (await ask("ชื่อบอทบน Cloudflare (อังกฤษตัวเล็ก ไม่มีเว้นวรรค)", curName)).toLowerCase().replace(/[^a-z0-9-]/g, "-");
-const paName = await ask("ชื่อ PA ของเรา", curPa);
+const paName = await ask("ชื่อเล่นของ PA (ภาษาไทยได้ · บอทใช้แนะนำตัวในไลน์ ไม่ใช่ชื่อบอทด้านบน)", curPa);
 const queueName = `${workerName}-jobs`;
 toml = toml.replace(/^name\s*=\s*"[^"]+"/m, `name = "${workerName}"`).replace(/PA_NAME\s*=\s*"[^"]*"/, `PA_NAME = "${paName}"`)
   .replace(/queue\s*=\s*"[^"]+"/g, `queue = "${queueName}"`);
