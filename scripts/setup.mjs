@@ -5,8 +5,60 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 
-const rl = createInterface({ input: process.stdin, output: process.stdout });
+// rl = ตัวรับคำตอบจากคีย์บอร์ด · ตอนให้ wrangler ถามเอง (login, subdomain) ต้องปิด rl ก่อน ไม่งั้นแย่งกันอ่านคีย์บอร์ด
+let rl;
+const openRl = () => { rl = createInterface({ input: process.stdin, output: process.stdout }); };
+openRl();
 const ask = async (q, def = "") => (await rl.question(def ? `${q} [${def}]: ` : `${q}: `)).trim() || def;
+const withKeyboard = (fn) => { rl.close(); try { return fn(); } finally { openRl(); } };
+
+// อ่านกุญแจเองแบบไม่แสดงตัวอักษรบนจอ (กันกุญแจโผล่บนโปรเจกเตอร์) — รองรับวางทั้งก้อน · Backspace · Ctrl-C
+function readHidden() {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    if (!stdin.isTTY) { // ไม่ใช่หน้าจอจริง (เช่นส่งค่าผ่าน pipe) → อ่านบรรทัดธรรมดา
+      openRl();
+      rl.question("").then((v) => { rl.close(); resolve(v); });
+      return;
+    }
+    let buf = "";
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding("utf8");
+    const onData = (chunk) => {
+      for (const ch of chunk) {
+        if (ch === "\u0003") { stdin.setRawMode(false); process.stdout.write("\n"); process.exit(130); } // Ctrl-C
+        if (ch === "\r" || ch === "\n") {
+          stdin.removeListener("data", onData);
+          stdin.setRawMode(false);
+          stdin.pause();
+          return resolve(buf);
+        }
+        if (ch === "\u007f" || ch === "\b") buf = buf.slice(0, -1);
+        else if (ch >= " ") buf += ch;
+      }
+    };
+    stdin.on("data", onData);
+  });
+}
+
+// รับกุญแจ แล้วเช็คหน้าตาก่อนส่งให้ wrangler (กันวางผิดช่อง/วางว่าง)
+async function askSecret(label, check) {
+  rl.close();
+  try {
+    for (;;) {
+      process.stdout.write(`→ วาง ${label} แล้วกด Enter (จะไม่เห็นตัวอักษร เป็นเรื่องปกติ): `);
+      const v = (await readHidden()).trim();
+      process.stdout.write("\n");
+      const problem = !v ? "ยังไม่ได้วางอะไรเลย" : check(v);
+      if (!problem) { console.log(`  ✓ รับแล้ว (${v.length} ตัวอักษร)`); return v; }
+      console.log(`  ✗ ${problem} ลองวางใหม่`);
+    }
+  } finally {
+    openRl();
+  }
+}
+
 const step = (n, t) => console.log(`\n\x1b[32m━━ ขั้นที่ ${n}: ${t}\x1b[0m`);
 const fail = (msg) => { console.error(`\n\x1b[31m✗ ${msg}\x1b[0m`); rl.close(); process.exit(1); };
 const LOGIN_LOST = /not logged in|not authenticated|non-interactive environment|CLOUDFLARE_API_TOKEN/i;
@@ -27,7 +79,7 @@ step(1, "เช็คว่าล็อกอิน Cloudflare แล้ว");
 // whoami --json จบด้วย error ทุกกรณีที่ใช้งานไม่ได้ (ไม่เคยล็อกอิน / token หมดอายุ)
 if (!loggedIn()) {
   console.log("ยังไม่ได้ล็อกอิน หรือล็อกอินหมดอายุ กำลังเปิดเบราว์เซอร์ให้กด Allow…");
-  spawnSync("npx", ["wrangler", "login"], { stdio: "inherit", shell: process.platform === "win32" });
+  withKeyboard(() => spawnSync("npx", ["wrangler", "login"], { stdio: "inherit", shell: process.platform === "win32" }));
   if (!loggedIn()) fail("ล็อกอินไม่สำเร็จ ลองรัน npx wrangler login เองอีกครั้ง แล้วค่อย npm run setup");
 }
 console.log("✓ ล็อกอินแล้ว");
@@ -72,7 +124,7 @@ let deploy = wrangler(["deploy"]);
 process.stdout.write(deploy.stdout || "");
 if (deploy.status !== 0) {
   console.log("ครั้งแรก Cloudflare อาจถามชื่อ subdomain ให้ตอบตามที่ขึ้นมาได้เลย");
-  deploy = wrangler(["deploy"], { stdio: "inherit" });
+  deploy = withKeyboard(() => wrangler(["deploy"], { stdio: "inherit" }));
   if (deploy.status !== 0) fail("Deploy ไม่สำเร็จ ดูข้อความสีแดงด้านบน");
 }
 let workerUrl = (deploy.stdout || "").match(/https:\/\/[^\s]+\.workers\.dev/)?.[0];
@@ -82,22 +134,36 @@ console.log(`✓ บอทอยู่ที่ ${workerUrl}`);
 
 step(5, "ใส่กุญแจ (พิมพ์แล้วจะไม่เห็นตัวอักษร เป็นเรื่องปกติ)");
 const secrets = [
-  ["LINE_CHANNEL_SECRET", "Channel secret", "LINE Developers > แท็บ Basic settings"],
-  ["LINE_CHANNEL_ACCESS_TOKEN", "Channel access token", "แท็บ Messaging API (ล่างสุด กด Issue)"],
-  ["OWNER_USER_ID", "Your user ID", "แท็บ Basic settings ล่างสุด ขึ้นต้นด้วย U"],
-  ["AI_API_KEY", "AI API key", "Gemini จาก AI Studio หรือ Claude"],
+  ["LINE_CHANNEL_SECRET", "Channel secret", "LINE Developers > แท็บ Basic settings",
+    (v) => /^[0-9a-f]{32}$/.test(v) ? null : "Channel secret ต้องเป็นตัวอักษร 32 ตัว (0-9 a-f) — อาจวางผิดช่อง"],
+  ["LINE_CHANNEL_ACCESS_TOKEN", "Channel access token", "แท็บ Messaging API ล่างสุด (กด Issue)",
+    (v) => v.length > 100 && !/\s/.test(v) ? null : "Channel access token ยาวมาก (เกิน 100 ตัว) — อาจวางผิดช่อง หรือวางไม่ครบ"],
+  ["OWNER_USER_ID", "Your user ID", "แท็บ Basic settings ล่างสุด",
+    (v) => /^U[0-9a-f]{32}$/.test(v) ? null : "Your user ID ต้องขึ้นต้นด้วย U ตามด้วยตัวอักษร 32 ตัว"],
+  ["AI_API_KEY", "AI API key", "Gemini จาก AI Studio หรือ Claude",
+    (v) => v.length >= 20 && !/\s/.test(v) ? null : "AI key สั้นเกินไป — อาจวางไม่ครบ"],
 ];
 // เช็คก่อนว่าบนบอทมีกุญแจตัวไหนแล้ว — ตัวที่ยังไม่มีต้องใส่ ข้ามไม่ได้
+// ถามบอทก่อน (รู้ด้วยว่าตัวไหนเป็นค่าว่าง) ถ้าถามไม่ได้ค่อยดูรายชื่อจาก wrangler
 let have = [];
-try { have = JSON.parse(wrangler(["secret", "list", "--format", "json"]).stdout || "[]").map((x) => x.name); } catch {}
-for (const [key, label, where] of secrets) {
+const oldToken = existsSync(".env.local") ? readFileSync(".env.local", "utf8").match(/EXPORT_TOKEN=(.+)/)?.[1] : null;
+try {
+  const r = await fetch(`${workerUrl}/admin/keys`, { headers: { Authorization: `Bearer ${oldToken}` }, signal: AbortSignal.timeout(10_000) });
+  if (oldToken && r.ok) have = Object.entries((await r.json()).set).filter(([, v]) => v).map(([k]) => k);
+  else throw new Error();
+} catch {
+  try { have = JSON.parse(wrangler(["secret", "list", "--format", "json"]).stdout || "[]").map((x) => x.name); } catch {}
+}
+for (const [key, label, where, check] of secrets) {
   if (have.includes(key)) {
     if ((await ask(`${label}: มีแล้ว ✓ ใส่ใหม่ไหม? (y/n)`, "n")).toLowerCase() !== "y") continue;
   } else {
     console.log(`${label}: ยังไม่มี (หาได้ที่ ${where})`);
   }
-  console.log(`→ วาง ${label} แล้วกด Enter (จะไม่เห็นตัวอักษร เป็นเรื่องปกติ)`);
-  if (wrangler(["secret", "put", key], { stdio: "inherit" }).status !== 0) fail(`ใส่ ${label} ไม่สำเร็จ`);
+  const value = await askSecret(label, check);
+  // ส่งค่าให้ wrangler ทาง stdin — ไม่ผ่านหน้าจอ ไม่ลงไฟล์
+  if (wrangler(["secret", "put", key], { input: value + "\n" }).status !== 0) fail(`ใส่ ${label} ไม่สำเร็จ`);
+  console.log(`  ✓ บันทึก ${label} บนบอทแล้ว`);
 }
 let exportToken = existsSync(".env.local") ? readFileSync(".env.local", "utf8").match(/EXPORT_TOKEN=(.+)/)?.[1] : null;
 if (!exportToken) {

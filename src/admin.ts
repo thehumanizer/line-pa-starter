@@ -23,6 +23,8 @@ export async function handleAdmin(req: Request, env: Env, url: URL): Promise<Res
   const p = url.searchParams;
   try {
     switch (url.pathname) {
+      // กุญแจตัวไหนใส่แล้ว (ไม่ว่าง) — ให้ npm run setup ใช้ ไม่ส่งค่าออกไป ส่งแค่ true/false
+      case "/admin/keys": return Response.json({ set: Object.fromEntries((["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN", "OWNER_USER_ID", "AI_API_KEY"] as const).map((k) => [k, !!env[k]])) });
       case "/admin/status": return Response.json(await status(env, url.origin, p.get("ai") !== "0"));
       case "/admin/connect-line": return Response.json(await connectLine(env, url.origin));
       case "/admin/groups": return Response.json(await groups(env));
