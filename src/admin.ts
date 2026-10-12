@@ -121,6 +121,9 @@ async function testWebhook(env: Env, endpoint: string) {
 
 async function connectLine(env: Env, origin: string) {
   const endpoint = `${origin}/webhook`;
+  if (!env.LINE_CHANNEL_ACCESS_TOKEN || !env.LINE_CHANNEL_SECRET) {
+    return { ok: false, endpoint, still_to_do: [], message: "ยังไม่ได้ใส่ Channel secret / Channel access token → npm run setup แล้ววางกุญแจ" };
+  }
   const set = await lineApi(env, "/channel/webhook/endpoint", { method: "PUT", body: JSON.stringify({ endpoint }) });
   if (!set.ok) {
     return { ok: false, endpoint, message: set.status === 401 ? "ไลน์ไม่รับ Channel access token → npm run setup ตอบ y เฉพาะ token" : `ตั้ง Webhook URL ไม่สำเร็จ (${set.status})` };

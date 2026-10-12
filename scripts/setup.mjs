@@ -82,15 +82,22 @@ console.log(`✓ บอทอยู่ที่ ${workerUrl}`);
 
 step(5, "ใส่กุญแจ (พิมพ์แล้วจะไม่เห็นตัวอักษร เป็นเรื่องปกติ)");
 const secrets = [
-  ["LINE_CHANNEL_SECRET", "Channel secret (จาก LINE Developers แท็บ Basic settings)"],
-  ["LINE_CHANNEL_ACCESS_TOKEN", "Channel access token (แท็บ Messaging API)"],
-  ["OWNER_USER_ID", "Your user ID (ขึ้นต้นด้วย U)"],
-  ["AI_API_KEY", "AI API key (Gemini หรือ Claude)"],
+  ["LINE_CHANNEL_SECRET", "Channel secret", "LINE Developers > แท็บ Basic settings"],
+  ["LINE_CHANNEL_ACCESS_TOKEN", "Channel access token", "แท็บ Messaging API (ล่างสุด กด Issue)"],
+  ["OWNER_USER_ID", "Your user ID", "แท็บ Basic settings ล่างสุด ขึ้นต้นด้วย U"],
+  ["AI_API_KEY", "AI API key", "Gemini จาก AI Studio หรือ Claude"],
 ];
-for (const [key, label] of secrets) {
-  if ((await ask(`ใส่ ${label} ตอนนี้ไหม? (y = ใส่, n = ข้ามเพราะใส่ไว้แล้ว)`, "y")).toLowerCase() !== "y") continue;
-  console.log(`→ วาง ${label} แล้วกด Enter`);
-  if (wrangler(["secret", "put", key], { stdio: "inherit" }).status !== 0) fail(`ใส่ ${key} ไม่สำเร็จ`);
+// เช็คก่อนว่าบนบอทมีกุญแจตัวไหนแล้ว — ตัวที่ยังไม่มีต้องใส่ ข้ามไม่ได้
+let have = [];
+try { have = JSON.parse(wrangler(["secret", "list", "--format", "json"]).stdout || "[]").map((x) => x.name); } catch {}
+for (const [key, label, where] of secrets) {
+  if (have.includes(key)) {
+    if ((await ask(`${label}: มีแล้ว ✓ ใส่ใหม่ไหม? (y/n)`, "n")).toLowerCase() !== "y") continue;
+  } else {
+    console.log(`${label}: ยังไม่มี (หาได้ที่ ${where})`);
+  }
+  console.log(`→ วาง ${label} แล้วกด Enter (จะไม่เห็นตัวอักษร เป็นเรื่องปกติ)`);
+  if (wrangler(["secret", "put", key], { stdio: "inherit" }).status !== 0) fail(`ใส่ ${label} ไม่สำเร็จ`);
 }
 let exportToken = existsSync(".env.local") ? readFileSync(".env.local", "utf8").match(/EXPORT_TOKEN=(.+)/)?.[1] : null;
 if (!exportToken) {
